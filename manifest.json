@@ -1,0 +1,18 @@
+{
+  "name": "Vortex Multi-Game Hub",
+  "short_name": "GameHub",
+  "description": "Koleksi  Game Seru dalam Satu Aplikasi",
+  "start_url": "index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f1020",
+  "theme_color": "#0f1020",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>maden_games</title>
+
+<style>
+:root {
+  --gradient-1: linear-gradient(135deg, #667eea, #764ba2);
+  --gradient-2: linear-gradient(135deg, #ff758c, #ff7eb3);
+  --gradient-3: linear-gradient(135deg, #43cea2, #185a9d);
+  --gradient-4: linear-gradient(135deg, #f7971e, #ffd200);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: system-ui, sans-serif;
+  background: var(--gradient-1);
+  color: #blue;
+}
+
+h1 {
+  margin-bottom: 40px;
+  font-size: 32px;
+}
+
+/* MENU */
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* TOMBOL */
+.menu a {
+  padding: 16px 32px;
+  border-radius: 14px;
+  text-decoration: none;
+  color: white;
+  font-size: 18px;
+  text-align: center;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(10px);
+  transition: transform 0.2s, background 0.2s;
+}
+
+.menu a:hover {
+  transform: scale(1.05);
+  background: rgba(0,0,0,0.55);
+}
+</style>
+</head>
+
+<body>
+
+<h1>🎮 Pilih Mode Permainan</h1>
+
+<div class="menu">
+   <a href=">🧱 puzzle</a>
+  <a href="c">🎯 Mode Klasik 2048</a>
+  <a href="">🧱 Mode Tetris 2048</a>
+  <a href="bola.html">⚽ Mode Butir 2048</a>
+  <a href="gra">🌍 Mode Gravitasi 2048</a>
+     <a href="sr">lempar bola</a>
+</div>
+
+</body>
+</html>

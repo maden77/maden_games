@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fruit Katana Fix</title>
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIkZydWl0IEthdGFuYSIsCiAgInNob3J0X25hbWUiOiAiS2F0YW5hIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwMDAiLAogICJ0aGVtZV9jb2xvciI6ICIjZmYwMDAwIgp9">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap');
+        body { margin: 0; overflow: hidden; background: #0a0a0a; font-family: sans-serif; touch-action: none; user-select: none; }
+        canvas { display: block; }
+        #hud {
+            position: absolute; top: 0; left: 0; width: 100%; padding: 20px;
+            display: flex; justify-content: space-between; box-sizing: border-box;
+            pointer-events: none; color: white; z-index: 5;
+        }
+        .stat { text-align: center; }
+        .val { font-family: 'Permanent Marker', cursive; font-size: 35px; color: #ffce00; display: block; }
+        #screen {
+            position: absolute; inset: 0; display: none; flex-direction: column;
+            justify-content: center; align-items: center; background: rgba(0,0,0,0.9);
+            z-index: 10; color: white; text-align: center;
+        }
+        .btn {
+            background: #ffce00; border: none; padding: 15px 40px; font-size: 20px;
+            font-weight: bold; border-radius: 50px; cursor: pointer; margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="hud">
+    <div class="stat"><span id="score" class="val">0</span></div>
+    <div id="lives" style="font-size: 24px;">❤️❤️❤️</div>
+</div>
+
+<div id="screen">
+    <h1 style="font-family: 'Permanent Marker'; font-size: 70px; color: red; margin:0;">GAME OVER</h1>
+    <p>Skor Anda: <span id="finalScore">0</span></p>
+    <button class="btn" onclick="startGame()">MAIN LAGI</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    let score = 0, lives = 3, level = 1, active = false;
+    let fruits = [], particles = [], trail = [], splatters = [];
+
+    const fruitTypes = [
+        { char: '🍎', color: '#ff3b30' }, { char: '🍉', color: '#4cd964' },
+        { char: '🍍', color: '#ffcc00' }, { char: '🍓', color: '#ff2d55' },
+        { char: '🍊', color: '#ff9500' }, { char: '🥝', color: '#c5e1a5' }
+    ];
+
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Sound Engine
+    function bleep(freq, type, dur) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
+        g.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        g.gain.linearRampToValueAtTime(0, audioCtx.currentTime + dur);
+        osc.connect(g); g.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + dur);
+    }
+
+    class Fruit {
+        constructor() {
+            this.f = fruitTypes[Math.floor(Math.random() * fruitTypes.length)];
+            this.x = Math.random() * (canvas.width - 100) + 50;
+            this.y = canvas.height + 50;
+            this.vx = (this.x < canvas.width/2 ? 1 : -1) * (Math.random() * 3);
+            this.vy = -(Math.random() * 5 + 13 + (level * 0.4));
+            this.rot = 0;
+            this.vRot = (Math.random() - 0.5) * 0.1;
+        }
+        update() {
+            this.x += this.vx; this.y += this.vy;
+            this.vy += 0.22; this.rot += this.vRot;
+        }
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rot);
+            ctx.font = '60px serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(this.f.char, 0, 0);
+            ctx.restore();
+        }
+    }
+
+    class Splatter {
+        constructor(x, y, color) {
+            this.x = x; this.y = y; this.color = color;
+            this.r = Math.random() * 30 + 20;
+            this.alpha = 0.6;
+        }
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = this.alpha;
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function handleInput(x, y) {
+        if(!active) return;
+        trail.push({x, y, life: 10});
+        if(trail.length > 2) bleep(800, 'triangle', 0.1);
+
+        fruits.forEach((f, i) => {
+            if(Math.hypot(f.x - x, f.y - y) < 45) {
+                bleep(150, 'sine', 0.2);
+                splatters.push(new Splatter(f.x, f.y, f.f.color));
+                // Partikel kecil
+                for(let j=0; j<10; j++) particles.push({
+                    x: f.x, y: f.y, color: f.f.color, 
+                    vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, a: 1
+                });
+                fruits.splice(i, 1);
+                score += 10;
+                document.getElementById('score').innerText = score;
+                level = Math.floor(score/100) + 1;
+            }
+        });
+    }
+
+    canvas.addEventListener('mousemove', e => handleInput(e.clientX, e.clientY));
+    canvas.addEventListener('touchmove', e => {
+        e.preventDefault();
+        handleInput(e.touches[0].clientX, e.touches[0].clientY);
+    }, {passive: false});
+
+    function startGame() {
+        score = 0; lives = 3; level = 1; active = true;
+        fruits = []; particles = []; trail = []; splatters = [];
+        document.getElementById('score').innerText = "0";
+        document.getElementById('lives').innerText = "❤️❤️❤️";
+        document.getElementById('screen').style.display = 'none';
+        animate();
+        spawn();
+    }
+
+    function spawn() {
+        if(!active) return;
+        fruits.push(new Fruit());
+        setTimeout(spawn, Math.max(400, 1800 - (level * 80)));
+    }
+
+    function animate() {
+        if(!active) return;
+        // Gunakan fillRect tanpa transparansi untuk membersihkan layar total (fix bercak)
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Update & Draw Splatters (Bercak background)
+        splatters.forEach((s, i) => {
+            s.draw();
+            s.alpha -= 0.005;
+            if(s.alpha <= 0) splatters.splice(i, 1);
+        });
+
+        // Trail Pedang
+        if(trail.length > 2) {
+            ctx.save();
+            ctx.beginPath(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 5;
+            ctx.shadowBlur = 10; ctx.shadowColor = '#fff';
+            ctx.moveTo(trail[0].x, trail[0].y);
+            for(let i=1; i<trail.length; i++) ctx.lineTo(trail[i].x, trail[i].y);
+            ctx.stroke();
+            ctx.restore();
+            trail.shift();
+        }
+
+        // Fruits
+        fruits.forEach((f, i) => {
+            f.update(); f.draw();
+            if(f.y > canvas.height + 60) {
+                fruits.splice(i, 1);
+                lives--;
+                bleep(100, 'sawtooth', 0.3);
+                document.getElementById('lives').innerText = "❤️".repeat(lives) || "💀";
+                if(lives <= 0) {
+                    active = false;
+                    document.getElementById('finalScore').innerText = score;
+                    document.getElementById('screen').style.display = 'flex';
+                }
+            }
+        });
+
+        // Partikel
+        particles.forEach((p, i) => {
+            ctx.save();
+            ctx.globalAlpha = p.a;
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, 4, 4);
+            ctx.restore();
+            p.x += p.vx; p.y += p.vy; p.a -= 0.02;
+            if(p.a <= 0) particles.splice(i, 1);
+        });
+
+        requestAnimationFrame(animate);
+    }
+
+    startGame();
+</script>
+</body>
+</html>

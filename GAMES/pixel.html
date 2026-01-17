@@ -3,52 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-      <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="icon-192x192.png" sizes="192x192">
-
-    <title>Voxel World - Navigasi Sesuai</title>
+    <title>Voxel World - Musik 8-Bit</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; touch-action: none; font-family: sans-serif; background: #87ceeb; }
         #ui-layer { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
         
-        /* D-Pad Navigasi di Kiri Bawah */
-        .dpad {
-            position: absolute; bottom: 40px; left: 40px;
-            display: grid;
-            grid-template-areas: 
-                ". up ."
-                "left . right"
-                ". down .";
-            gap: 12px;
-            pointer-events: auto;
-        }
-        .dpad-btn {
-            width: 65px; height: 65px;
-            background: rgba(0,0,0,0.6); color: white;
+        /* Area Joystick */
+        #joystick-container {
+            position: absolute; bottom: 50px; left: 50px;
+            width: 140px; height: 140px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            border-radius: 15px; border: 2px solid rgba(255,255,255,0.2);
-            font-size: 24px; font-weight: bold; user-select: none;
-            backdrop-filter: blur(8px);
+            pointer-events: auto;
+            backdrop-filter: blur(5px);
         }
-        .dpad-btn:active { background: rgba(255,255,255,0.9); color: black; }
-        #up { grid-area: up; }
-        #down { grid-area: down; }
-        #left { grid-area: left; }
-        #right { grid-area: right; }
+        #joystick-knob {
+            width: 60px; height: 60px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            position: absolute;
+        }
 
-        /* Tombol Aksi - Dipindahkan lebih tinggi agar tidak tertekan bersamaan */
+        /* Tombol Aksi */
         .action-group {
             position: absolute; bottom: 200px; right: 40px;
             display: flex; flex-direction: column; gap: 20px;
             pointer-events: auto;
         }
         .btn-action {
-            width: 100px; height: 100px; border-radius: 50%;
+            width: 90px; height: 90px; border-radius: 50%;
             background: rgba(0,0,0,0.6); color: white;
             display: flex; align-items: center; justify-content: center;
             border: 3px solid rgba(255,255,255,0.3); 
-            font-weight: bold; font-size: 14px; user-select: none;
+            font-weight: bold; font-size: 12px; user-select: none;
             backdrop-filter: blur(8px);
             text-align: center;
         }
@@ -66,14 +57,18 @@
 
     <div id="overlay">
         <h1>VOXEL WORLD</h1>
-        <p style="color: #ffeb3b"><b>KONTROL DIPERBAIKI:</b></p>
-        <div id="ui-layer">
-        <div class="dpad">
-            <div id="up" class="dpad-btn">▲</div>
-            <div id="right" class="dpad-btn">◀</div>
-            <div id="left" class="dpad-btn">▶</div>
-            <div id="down" class="dpad-btn">▼</div>
+        <p style="color: #ffeb3b"><b>AUDIO AKTIF:</b></p>
+        <p>Musik latar & efek suara telah ditambahkan!</p>
+        <p>Gunakan stik di kiri untuk lari bebas</p>
+        <br>
+        <p><i>Klik layar untuk memulai (dan mengaktifkan suara)</i></p>
+    </div>
+
+    <div id="ui-layer">
+        <div id="joystick-container">
+            <div id="joystick-knob"></div>
         </div>
+        
         <div class="action-group">
             <div id="btn-jump" class="btn-action">LOMPAT</div>
             <div id="btn-build" class="btn-action">PASANG<br>BLOK</div>
@@ -87,17 +82,60 @@
         let worldBlocks = [];
         let gameStarted = false;
         
-        let keys = { up: false, down: false, left: false, right: false };
+        // Audio Logic
+        let audioCtx;
+        const notes = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25]; // C4 to C5
+        let melodyIndex = 0;
+        const melody = [0, 2, 4, 0, 0, 2, 4, 0, 4, 5, 7, 4, 5, 7];
+
+        // State Joystick
+        let joystickActive = false;
+        let joystickInput = { x: 0, y: 0 };
+        const joystickMaxDist = 60;
+
         let cameraYaw = 0;
         let walkCycle = 0;
         let isJumping = false;
         let vVelocity = 0;
-        let targetRotation = 0;
 
         const GRID = 1.0;
-        const MOVE_SPEED = 0.16;
+        const MOVE_SPEED_BASE = 0.16;
         const JUMP_FORCE = 0.38;
         const GRAVITY = -0.016;
+
+        function initAudio() {
+            if (audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Loop musik latar
+            setInterval(() => {
+                if (gameStarted) playNote(notes[melody[melodyIndex]], 0.1, 'triangle', 0.05);
+                melodyIndex = (melodyIndex + 1) % melody.length;
+            }, 250);
+        }
+
+        function playNote(freq, duration, type = 'square', vol = 0.1) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function playJumpSound() {
+            playNote(150, 0.3, 'sine', 0.2);
+            setTimeout(() => playNote(400, 0.2, 'sine', 0.1), 50);
+        }
+
+        function playBuildSound() {
+            playNote(800, 0.1, 'square', 0.05);
+        }
 
         function init() {
             scene = new THREE.Scene();
@@ -128,7 +166,8 @@
 
             setupPlayer();
             setupBuildPreview();
-            setupControls();
+            setupJoystick();
+            setupActions();
             animate();
         }
 
@@ -160,7 +199,6 @@
             head.position.y = 0.65;
             torso.add(head);
 
-            // Detail Wajah (Z+ adalah arah wajah karakter)
             const eyeGeo = new THREE.BoxGeometry(0.08, 0.12, 0.05);
             const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
             const lEye = new THREE.Mesh(eyeGeo, eyeMat); lEye.position.set(-0.1, 0.05, 0.23); head.add(lEye);
@@ -183,41 +221,81 @@
             scene.add(buildPreview);
         }
 
-        function setupControls() {
-            const bindBtn = (id, key) => {
-                const el = document.getElementById(id);
-                if(!el) return;
-                const start = (e) => { e.preventDefault(); keys[key] = true; startGame(); };
-                const end = (e) => { e.preventDefault(); keys[key] = false; };
-                el.addEventListener('touchstart', start); el.addEventListener('touchend', end);
-                el.addEventListener('mousedown', start); el.addEventListener('mouseup', end);
+        function setupJoystick() {
+            const container = document.getElementById('joystick-container');
+            const knob = document.getElementById('joystick-knob');
+
+            const handleTouch = (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const rect = container.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                let dx = touch.clientX - centerX;
+                let dy = touch.clientY - centerY;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+
+                if (distance > joystickMaxDist) {
+                    dx *= joystickMaxDist / distance;
+                    dy *= joystickMaxDist / distance;
+                }
+
+                knob.style.transform = `translate(${dx}px, ${dy}px)`;
+                joystickInput.x = dx / joystickMaxDist;
+                joystickInput.y = dy / joystickMaxDist;
+                joystickActive = true;
+                startGame();
             };
 
-            bindBtn('up', 'down'); bindBtn('down', 'up');
-            bindBtn('left', 'right'); bindBtn('right', 'left');
+            const resetJoystick = () => {
+                knob.style.transform = `translate(0px, 0px)`;
+                joystickInput = { x: 0, y: 0 };
+                joystickActive = false;
+            };
 
-            const jump = (e) => { e.preventDefault(); if (!isJumping) { vVelocity = JUMP_FORCE; isJumping = true; } startGame(); };
+            container.addEventListener('touchstart', handleTouch);
+            container.addEventListener('touchmove', handleTouch);
+            container.addEventListener('touchend', resetJoystick);
+        }
+
+        function setupActions() {
+            const jump = (e) => { 
+                e.preventDefault(); 
+                if (!isJumping) { 
+                    vVelocity = JUMP_FORCE; 
+                    isJumping = true; 
+                    playJumpSound();
+                } 
+                startGame(); 
+            };
             document.getElementById('btn-jump').addEventListener('touchstart', jump);
-            document.getElementById('btn-jump').addEventListener('mousedown', jump);
 
             const build = (e) => {
                 e.preventDefault();
                 const brick = new THREE.Mesh(new THREE.BoxGeometry(GRID, GRID, GRID), new THREE.MeshPhongMaterial({ color: 0x8d6e63 }));
                 brick.position.copy(buildPreview.position);
-                brick.castShadow = true; brick.receiveShadow = true;
-                scene.add(brick); worldBlocks.push(brick);
+                brick.castShadow = true; 
+                scene.add(brick); 
+                worldBlocks.push(brick);
+                playBuildSound();
                 startGame();
             };
             document.getElementById('btn-build').addEventListener('touchstart', build);
-            document.getElementById('btn-build').addEventListener('mousedown', build);
 
-            const startGame = () => { if (!gameStarted) { gameStarted = true; document.getElementById('overlay').style.display = 'none'; }};
+            const startGame = () => { 
+                if (!gameStarted) { 
+                    gameStarted = true; 
+                    document.getElementById('overlay').style.display = 'none'; 
+                    initAudio(); // Aktifkan audio saat interaksi pertama
+                }
+            };
             document.getElementById('overlay').addEventListener('click', startGame);
 
             let lastX = 0;
-            document.addEventListener('touchstart', (e) => { if (e.touches[0].clientX > window.innerWidth * 0.4) lastX = e.touches[0].clientX; });
+            document.addEventListener('touchstart', (e) => { if (e.touches[0].clientX > window.innerWidth * 0.5) lastX = e.touches[0].clientX; });
             document.addEventListener('touchmove', (e) => {
-                if (e.touches[0].clientX > window.innerWidth * 0.4) {
+                if (e.touches[0].clientX > window.innerWidth * 0.5) {
                     const dx = e.touches[0].clientX - lastX;
                     cameraYaw -= dx * 0.007;
                     lastX = e.touches[0].clientX;
@@ -248,26 +326,21 @@
                 if (player.position.y > floorY) vVelocity += GRAVITY;
                 else { player.position.y = floorY; vVelocity = 0; isJumping = false; }
 
-                let moving = false;
-                
-                // Atas = Karakter menghadap menjauh dari kamera (Maju)
-                // Bawah = Karakter menghadap ke arah kamera (Mundur)
-                if (keys.up) { targetRotation = Math.PI; moving = true; }   
-                if (keys.down) { targetRotation = 0; moving = true; }           
-                if (keys.left) { targetRotation = -Math.PI / 2; moving = true; } 
-                if (keys.right) { targetRotation = Math.PI / 2; moving = true; }  
-
-                if (moving) {
-                    let diff = targetRotation - player.rotation.y;
+                if (joystickActive) {
+                    const moveX = joystickInput.x;
+                    const moveZ = joystickInput.y;
+                    const angle = Math.atan2(moveX, moveZ);
+                    
+                    let diff = angle - player.rotation.y;
                     while (diff < -Math.PI) diff += Math.PI * 2;
                     while (diff > Math.PI) diff -= Math.PI * 2;
                     player.rotation.y += diff * 0.2;
 
-                    // Bergerak ke arah wajah (Z+)
+                    const intensity = Math.min(1, Math.sqrt(moveX*moveX + moveZ*moveZ));
                     const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(player.quaternion);
-                    player.position.addScaledVector(forward, MOVE_SPEED);
+                    player.position.addScaledVector(forward, MOVE_SPEED_BASE * intensity);
 
-                    walkCycle += dt * 14;
+                    walkCycle += dt * 14 * intensity;
                     const swing = Math.sin(walkCycle);
                     limbs.lLeg.rotation.x = swing * 0.8;
                     limbs.rLeg.rotation.x = -swing * 0.8;
@@ -288,13 +361,8 @@
                     bodyGroup.position.y = THREE.MathUtils.lerp(bodyGroup.position.y, 0, lerp);
                 }
 
-                // Posisi blok preview selalu di depan karakter
                 const buildPos = new THREE.Vector3(0, 0, 2.5).applyQuaternion(player.quaternion).add(player.position);
-                buildPreview.position.set(
-                    Math.round(buildPos.x),
-                    Math.max(0.5, Math.round(player.position.y + 0.5)),
-                    Math.round(buildPos.z)
-                );
+                buildPreview.position.set(Math.round(buildPos.x), Math.max(0.5, Math.round(player.position.y + 0.5)), Math.round(buildPos.z));
 
                 const dist = 8;
                 camera.position.set(

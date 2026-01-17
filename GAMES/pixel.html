@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Voxel World - Navigasi Sesuai</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; touch-action: none; font-family: sans-serif; background: #87ceeb; }
+        #ui-layer { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+        
+        /* D-Pad Navigasi di Kiri Bawah */
+        .dpad {
+            position: absolute; bottom: 40px; left: 40px;
+            display: grid;
+            grid-template-areas: 
+                ". up ."
+                "left . right"
+                ". down .";
+            gap: 12px;
+            pointer-events: auto;
+        }
+        .dpad-btn {
+            width: 65px; height: 65px;
+            background: rgba(0,0,0,0.6); color: white;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 15px; border: 2px solid rgba(255,255,255,0.2);
+            font-size: 24px; font-weight: bold; user-select: none;
+            backdrop-filter: blur(8px);
+        }
+        .dpad-btn:active { background: rgba(255,255,255,0.9); color: black; }
+        #up { grid-area: up; }
+        #down { grid-area: down; }
+        #left { grid-area: left; }
+        #right { grid-area: right; }
+
+        /* Tombol Aksi - Dipindahkan lebih tinggi agar tidak tertekan bersamaan */
+        .action-group {
+            position: absolute; bottom: 200px; right: 40px;
+            display: flex; flex-direction: column; gap: 20px;
+            pointer-events: auto;
+        }
+        .btn-action {
+            width: 100px; height: 100px; border-radius: 50%;
+            background: rgba(0,0,0,0.6); color: white;
+            display: flex; align-items: center; justify-content: center;
+            border: 3px solid rgba(255,255,255,0.3); 
+            font-weight: bold; font-size: 14px; user-select: none;
+            backdrop-filter: blur(8px);
+            text-align: center;
+        }
+        #btn-build { background: rgba(255, 140, 0, 0.7); border-color: orange; }
+        .btn-action:active { transform: scale(0.9); background: rgba(255,255,255,0.9); color: #000; }
+        
+        #overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.85);
+            color: white; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 100; text-align: center; cursor: pointer; padding: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1>VOXEL WORLD</h1>
+        <p style="color: #ffeb3b"><b>KONTROL DIPERBAIKI:</b></p>
+        <p>Atas ↑ = Maju (Menjauh)</p>
+        <p>Bawah ↓ = Mundur (Mendekat)</p>
+        <p>Tombol Aksi diletakkan lebih tinggi</p>
+        <br>
+        <p><i>Klik layar untuk memulai</i></p>
+    </div>
+
+    <div id="ui-layer">
+        <div class="dpad">
+            <div id="up" class="dpad-btn">▲</div>
+            <div id="left" class="dpad-btn">◀</div>
+            <div id="right" class="dpad-btn">▶</div>
+            <div id="down" class="dpad-btn">▼</div>
+        </div>
+        <div class="action-group">
+            <div id="btn-jump" class="btn-action">LOMPAT</div>
+            <div id="btn-build" class="btn-action">PASANG<br>BLOK</div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, clock;
+        let player, bodyGroup, torsoGroup, buildPreview;
+        let limbs = {}; 
+        let worldBlocks = [];
+        let gameStarted = false;
+        
+        let keys = { up: false, down: false, left: false, right: false };
+        let cameraYaw = 0;
+        let walkCycle = 0;
+        let isJumping = false;
+        let vVelocity = 0;
+        let targetRotation = 0;
+
+        const GRID = 1.0;
+        const MOVE_SPEED = 0.16;
+        const JUMP_FORCE = 0.38;
+        const GRAVITY = -0.016;
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            scene.fog = new THREE.FogExp2(0x87ceeb, 0.002);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+
+            const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+            sun.position.set(50, 100, 50);
+            sun.castShadow = true;
+            scene.add(sun);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(2000, 2000),
+                new THREE.MeshPhongMaterial({ color: 0x6ab04c })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            setupPlayer();
+            setupBuildPreview();
+            setupControls();
+            animate();
+        }
+
+        function createPart(w, h, d, color, px, py, pz, isLimb = false) {
+            const group = new THREE.Group();
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshPhongMaterial({ color }));
+            if (isLimb) mesh.position.y = -h / 2;
+            mesh.castShadow = true;
+            group.add(mesh);
+            group.position.set(px, py, pz);
+            return group;
+        }
+
+        function setupPlayer() {
+            player = new THREE.Group();
+            bodyGroup = new THREE.Group();
+            torsoGroup = new THREE.Group();
+            player.add(bodyGroup);
+            bodyGroup.add(torsoGroup);
+
+            const skin = 0xffdbac, shirt = 0x2e86de, pants = 0x222f3e;
+
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.4), new THREE.MeshPhongMaterial({color: shirt}));
+            torso.position.y = 1.4;
+            torso.castShadow = true;
+            torsoGroup.add(torso);
+
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), new THREE.MeshPhongMaterial({color: skin}));
+            head.position.y = 0.65;
+            torso.add(head);
+
+            // Detail Wajah (Z+ adalah arah wajah karakter)
+            const eyeGeo = new THREE.BoxGeometry(0.08, 0.12, 0.05);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const lEye = new THREE.Mesh(eyeGeo, eyeMat); lEye.position.set(-0.1, 0.05, 0.23); head.add(lEye);
+            const rEye = new THREE.Mesh(eyeGeo, eyeMat); rEye.position.set(0.1, 0.05, 0.23); head.add(rEye);
+
+            limbs.lArm = createPart(0.2, 0.7, 0.2, skin, -0.4, 1.75, 0, true);
+            limbs.rArm = createPart(0.2, 0.7, 0.2, skin, 0.4, 1.75, 0, true);
+            limbs.lLeg = createPart(0.25, 0.8, 0.25, pants, -0.18, 1.1, 0, true);
+            limbs.rLeg = createPart(0.25, 0.8, 0.25, pants, 0.18, 1.1, 0, true);
+
+            torsoGroup.add(limbs.lArm, limbs.rArm, limbs.lLeg, limbs.rLeg);
+            scene.add(player);
+        }
+
+        function setupBuildPreview() {
+            buildPreview = new THREE.Mesh(
+                new THREE.BoxGeometry(GRID, GRID, GRID),
+                new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, wireframe: true })
+            );
+            scene.add(buildPreview);
+        }
+
+        function setupControls() {
+            const bindBtn = (id, key) => {
+                const el = document.getElementById(id);
+                if(!el) return;
+                const start = (e) => { e.preventDefault(); keys[key] = true; startGame(); };
+                const end = (e) => { e.preventDefault(); keys[key] = false; };
+                el.addEventListener('touchstart', start); el.addEventListener('touchend', end);
+                el.addEventListener('mousedown', start); el.addEventListener('mouseup', end);
+            };
+
+            bindBtn('up', 'up'); bindBtn('down', 'down');
+            bindBtn('left', 'left'); bindBtn('right', 'right');
+
+            const jump = (e) => { e.preventDefault(); if (!isJumping) { vVelocity = JUMP_FORCE; isJumping = true; } startGame(); };
+            document.getElementById('btn-jump').addEventListener('touchstart', jump);
+            document.getElementById('btn-jump').addEventListener('mousedown', jump);
+
+            const build = (e) => {
+                e.preventDefault();
+                const brick = new THREE.Mesh(new THREE.BoxGeometry(GRID, GRID, GRID), new THREE.MeshPhongMaterial({ color: 0x8d6e63 }));
+                brick.position.copy(buildPreview.position);
+                brick.castShadow = true; brick.receiveShadow = true;
+                scene.add(brick); worldBlocks.push(brick);
+                startGame();
+            };
+            document.getElementById('btn-build').addEventListener('touchstart', build);
+            document.getElementById('btn-build').addEventListener('mousedown', build);
+
+            const startGame = () => { if (!gameStarted) { gameStarted = true; document.getElementById('overlay').style.display = 'none'; }};
+            document.getElementById('overlay').addEventListener('click', startGame);
+
+            let lastX = 0;
+            document.addEventListener('touchstart', (e) => { if (e.touches[0].clientX > window.innerWidth * 0.4) lastX = e.touches[0].clientX; });
+            document.addEventListener('touchmove', (e) => {
+                if (e.touches[0].clientX > window.innerWidth * 0.4) {
+                    const dx = e.touches[0].clientX - lastX;
+                    cameraYaw -= dx * 0.007;
+                    lastX = e.touches[0].clientX;
+                }
+            });
+        }
+
+        function checkCollision(pos) {
+            let floor = 0;
+            for(let b of worldBlocks) {
+                const dx = Math.abs(pos.x - b.position.x);
+                const dz = Math.abs(pos.z - b.position.z);
+                if (dx < 0.8 && dz < 0.8) {
+                    const top = b.position.y + 0.5;
+                    if (pos.y >= top - 0.5) floor = Math.max(floor, top);
+                }
+            }
+            return floor;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+
+            if (gameStarted) {
+                player.position.y += vVelocity;
+                const floorY = checkCollision(player.position);
+                if (player.position.y > floorY) vVelocity += GRAVITY;
+                else { player.position.y = floorY; vVelocity = 0; isJumping = false; }
+
+                let moving = false;
+                
+                // Atas = Karakter menghadap menjauh dari kamera (Maju)
+                // Bawah = Karakter menghadap ke arah kamera (Mundur)
+                if (keys.up) { targetRotation = Math.PI; moving = true; }   
+                if (keys.down) { targetRotation = 0; moving = true; }           
+                if (keys.left) { targetRotation = -Math.PI / 2; moving = true; } 
+                if (keys.right) { targetRotation = Math.PI / 2; moving = true; }  
+
+                if (moving) {
+                    let diff = targetRotation - player.rotation.y;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+                    player.rotation.y += diff * 0.2;
+
+                    // Bergerak ke arah wajah (Z+)
+                    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(player.quaternion);
+                    player.position.addScaledVector(forward, MOVE_SPEED);
+
+                    walkCycle += dt * 14;
+                    const swing = Math.sin(walkCycle);
+                    limbs.lLeg.rotation.x = swing * 0.8;
+                    limbs.rLeg.rotation.x = -swing * 0.8;
+                    limbs.lArm.rotation.x = -swing * 0.7;
+                    limbs.rArm.rotation.x = swing * 0.7;
+                    limbs.lLeg.position.y = 1.1 + (swing < 0 ? Math.abs(swing) * 0.2 : 0);
+                    limbs.rLeg.position.y = 1.1 + (swing > 0 ? Math.abs(swing) * 0.2 : 0);
+                    bodyGroup.position.y = Math.abs(swing) * 0.1;
+                } else {
+                    walkCycle = 0;
+                    const lerp = 0.15;
+                    limbs.lLeg.rotation.x = THREE.MathUtils.lerp(limbs.lLeg.rotation.x, 0, lerp);
+                    limbs.rLeg.rotation.x = THREE.MathUtils.lerp(limbs.rLeg.rotation.x, 0, lerp);
+                    limbs.lArm.rotation.x = THREE.MathUtils.lerp(limbs.lArm.rotation.x, 0, lerp);
+                    limbs.rArm.rotation.x = THREE.MathUtils.lerp(limbs.rArm.rotation.x, 0, lerp);
+                    limbs.lLeg.position.y = THREE.MathUtils.lerp(limbs.lLeg.position.y, 1.1, lerp);
+                    limbs.rLeg.position.y = THREE.MathUtils.lerp(limbs.rLeg.position.y, 1.1, lerp);
+                    bodyGroup.position.y = THREE.MathUtils.lerp(bodyGroup.position.y, 0, lerp);
+                }
+
+                // Posisi blok preview selalu di depan karakter
+                const buildPos = new THREE.Vector3(0, 0, 2.5).applyQuaternion(player.quaternion).add(player.position);
+                buildPreview.position.set(
+                    Math.round(buildPos.x),
+                    Math.max(0.5, Math.round(player.position.y + 0.5)),
+                    Math.round(buildPos.z)
+                );
+
+                const dist = 8;
+                camera.position.set(
+                    player.position.x + Math.sin(cameraYaw) * dist,
+                    player.position.y + 4,
+                    player.position.z + Math.cos(cameraYaw) * dist
+                );
+                camera.lookAt(player.position.x, player.position.y + 1.5, player.position.z);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = init;
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
+

@@ -3,385 +3,556 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Voxel World - Musik 8-Bit</title>
+    <title>Voxel Human World Multiplayer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; touch-action: none; font-family: sans-serif; background: #87ceeb; }
-        #ui-layer { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+        body { margin: 0; overflow: hidden; touch-action: none; font-family: 'Segoe UI', sans-serif; background: #87ceeb; }
+        #ui-container { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
         
-        /* Area Joystick */
-        #joystick-container {
-            position: absolute; bottom: 50px; left: 50px;
-            width: 140px; height: 140px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
+        #hud {
+            position: absolute; top: 15px; left: 15px;
+            background: rgba(0,0,0,0.7); color: white; padding: 10px 20px;
+            border-radius: 30px; font-weight: bold; backdrop-filter: blur(8px);
+            display: flex; align-items: center; gap: 10px; border: 1px solid rgba(255,255,255,0.2);
             pointer-events: auto;
-            backdrop-filter: blur(5px);
-        }
-        #joystick-knob {
-            width: 60px; height: 60px;
-            background: rgba(255, 255, 255, 0.8);
-            border-radius: 50%;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            position: absolute;
         }
 
-        /* Tombol Aksi */
-        .action-group {
-            position: absolute; bottom: 200px; right: 40px;
-            display: flex; flex-direction: column; gap: 20px;
-            pointer-events: auto;
+        #music-toggle {
+            position: absolute; top: 15px; right: 15px;
+            background: rgba(0,0,0,0.7); color: white; padding: 10px;
+            border-radius: 50%; font-weight: bold; pointer-events: auto;
+            border: 1px solid rgba(255,255,255,0.2); cursor: pointer;
         }
-        .btn-action {
-            width: 90px; height: 90px; border-radius: 50%;
-            background: rgba(0,0,0,0.6); color: white;
-            display: flex; align-items: center; justify-content: center;
-            border: 3px solid rgba(255,255,255,0.3); 
-            font-weight: bold; font-size: 12px; user-select: none;
-            backdrop-filter: blur(8px);
-            text-align: center;
+
+        #mode-indicator {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            background: rgba(231, 76, 60, 0.9); color: white; padding: 5px 15px; border-radius: 10px;
+            font-size: 12px; display: none; font-weight: bold;
         }
-        #btn-build { background: rgba(255, 140, 0, 0.7); border-color: orange; }
-        .btn-action:active { transform: scale(0.9); background: rgba(255,255,255,0.9); color: #000; }
-        
-        #overlay {
+
+        #shop-overlay {
             position: absolute; inset: 0; background: rgba(0,0,0,0.85);
-            color: white; display: flex; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 100; text-align: center; cursor: pointer; padding: 20px;
+            display: none; align-items: center; justify-content: center;
+            pointer-events: auto; z-index: 100;
+        }
+        .shop-content { background: #fff; padding: 25px; border-radius: 20px; width: 340px; color: #333; max-height: 80vh; overflow-y: auto; }
+        
+        .shop-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
+        .buy-button { background: #2ecc71; color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+
+        #joy-base {
+            position: absolute; bottom: 80px; left: 40px;
+            width: 100px; height: 100px; background: rgba(255,255,255,0.1);
+            border-radius: 50%; pointer-events: auto; border: 2px solid rgba(255,255,255,0.3);
+            z-index: 20;
+        }
+        #joy-stick {
+            width: 45px; height: 45px; background: #fff; border-radius: 50%;
+            position: absolute; top: 27.5px; left: 27.5px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .actions { position: absolute; bottom: 80px; right: 40px; pointer-events: auto; display: flex; flex-direction: column; gap: 15px; z-index: 20; }
+        .btn-circle {
+            width: 65px; height: 65px; background: rgba(0,0,0,0.6);
+            border: 2px solid #fff; border-radius: 50%; color: #fff;
+            display: flex; align-items: center; justify-content: center; font-size: 28px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .btn-active { background: #e74c3c !important; border-color: #ff9f43; }
+
+        #inv-bar {
+            position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 10px; background: rgba(0,0,0,0.8); padding: 10px;
+            border-radius: 20px; pointer-events: auto; max-width: 90vw; overflow-x: auto;
+            z-index: 15;
+        }
+        .inv-slot {
+            min-width: 50px; height: 50px; background: #333; border: 2px solid transparent;
+            border-radius: 12px; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; color: #fff; font-size: 9px; transition: 0.2s;
+            flex-shrink: 0;
+        }
+        .inv-slot.selected { border-color: #f1c40f; background: #555; transform: scale(1.1); }
+
+        #toast {
+            position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+            background: #2c3e50; color: white; padding: 10px 25px; border-radius: 30px;
+            display: none; z-index: 50; font-weight: bold; border: 1px solid #34495e;
+        }
+
+        .harvest-btn {
+            position: absolute; background: #ff4757; color: white; padding: 4px 10px;
+            border-radius: 8px; font-size: 10px; font-weight: bold; pointer-events: auto;
+            transform: translate(-50%, -100%); border: 2px solid white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3); white-space: nowrap; z-index: 100;
         }
     </style>
 </head>
 <body>
 
-    <div id="overlay">
-        <h1>VOXEL WORLD</h1>
-        <p style="color: #ffeb3b"><b>AUDIO AKTIF:</b></p>
-        <p>Musik latar & efek suara telah ditambahkan!</p>
-        <p>Gunakan stik di kiri untuk lari bebas</p>
-        <br>
-        <p><i>Klik layar untuk memulai (dan mengaktifkan suara)</i></p>
-    </div>
+    <div id="toast">Notifikasi</div>
+    <div id="mode-indicator">MODE HAPUS AKTIF</div>
+    <div id="harvest-container" style="position: absolute; inset: 0; pointer-events: none;"></div>
 
-    <div id="ui-layer">
-        <div id="joystick-container">
-            <div id="joystick-knob"></div>
-        </div>
-        
-        <div class="action-group">
-            <div id="btn-jump" class="btn-action">LOMPAT</div>
-            <div id="btn-build" class="btn-action">PASANG<br>BLOK</div>
+    <div id="shop-overlay">
+        <div class="shop-content">
+            <h3 style="margin-top:0; text-align: center;">🏗️ Toko Bangunan</h3>
+            <p style="font-size: 14px; color: #666; margin-bottom: 20px;">Tukarkan hasil panenmu dengan material.</p>
+            <div id="shop-items-container"></div>
+            <button onclick="closeShop()" style="width:100%; margin-top:20px; padding:12px; background:#e74c3c; color:white; border:none; border-radius:12px; font-weight:bold;">TUTUP</button>
         </div>
     </div>
 
-    <script>
-        let scene, camera, renderer, clock;
-        let player, bodyGroup, torsoGroup, buildPreview;
-        let limbs = {}; 
-        let worldBlocks = [];
-        let gameStarted = false;
-        
-        // Audio Logic
-        let audioCtx;
-        const notes = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25]; // C4 to C5
-        let melodyIndex = 0;
-        const melody = [0, 2, 4, 0, 0, 2, 4, 0, 4, 5, 7, 4, 5, 7];
+    <div id="ui-container">
+        <div id="hud">🍎 <span id="apple-val">0</span></div>
+        <div id="music-toggle" onclick="toggleMusic()">🎵</div>
+        <div id="joy-base"><div id="joy-stick"></div></div>
+        <div class="actions">
+            <div class="btn-circle" id="jump-trigger">⬆️</div>
+            <div class="btn-circle" id="delete-mode-trigger">🗑️</div>
+        </div>
+        <div id="inv-bar"></div>
+    </div>
 
-        // State Joystick
-        let joystickActive = false;
-        let joystickInput = { x: 0, y: 0 };
-        const joystickMaxDist = 60;
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        let cameraYaw = 0;
-        let walkCycle = 0;
-        let isJumping = false;
-        let vVelocity = 0;
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'human-multiplayer-v4';
 
-        const GRID = 1.0;
-        const MOVE_SPEED_BASE = 0.16;
-        const JUMP_FORCE = 0.38;
-        const GRAVITY = -0.016;
-
+        // --- AUDIO ENGINE ---
+        let audioCtx, musicGain, isMusicPlaying = false;
         function initAudio() {
             if (audioCtx) return;
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Loop musik latar
-            setInterval(() => {
-                if (gameStarted) playNote(notes[melody[melodyIndex]], 0.1, 'triangle', 0.05);
-                melodyIndex = (melodyIndex + 1) % melody.length;
-            }, 250);
+            musicGain = audioCtx.createGain();
+            musicGain.gain.value = 0.15;
+            musicGain.connect(audioCtx.destination);
         }
 
-        function playNote(freq, duration, type = 'square', vol = 0.1) {
+        function playTone(freq, type, duration, volume = 0.1) {
             if (!audioCtx) return;
             const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
+            const g = audioCtx.createGain();
             osc.type = type;
             osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
+            g.gain.setValueAtTime(volume, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            osc.connect(g);
+            g.connect(audioCtx.destination);
             osc.start();
             osc.stop(audioCtx.currentTime + duration);
         }
 
-        function playJumpSound() {
-            playNote(150, 0.3, 'sine', 0.2);
-            setTimeout(() => playNote(400, 0.2, 'sine', 0.1), 50);
+        function playMusic() {
+            if (!isMusicPlaying) return;
+            // Melodi perkebunan sederhana (C Major)
+            const notes = [261.63, 329.63, 392.00, 523.25, 440.00, 392.00, 329.63, 293.66];
+            let step = 0;
+            const sequence = () => {
+                if (!isMusicPlaying) return;
+                playTone(notes[step % notes.length], 'triangle', 0.5, 0.05);
+                step++;
+                setTimeout(sequence, 600);
+            };
+            sequence();
         }
 
-        function playBuildSound() {
-            playNote(800, 0.1, 'square', 0.05);
-        }
+        window.toggleMusic = () => {
+            initAudio();
+            isMusicPlaying = !isMusicPlaying;
+            document.getElementById('music-toggle').innerText = isMusicPlaying ? '🔊' : '🎵';
+            if (isMusicPlaying) {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                playMusic();
+            }
+        };
 
-        function init() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87ceeb);
-            scene.fog = new THREE.FogExp2(0x87ceeb, 0.002);
+        const playHarvestSound = () => {
+            playTone(523.25, 'sine', 0.2, 0.1); // C5
+            setTimeout(() => playTone(659.25, 'sine', 0.2, 0.1), 100); // E5
+        };
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const playPlantSound = () => {
+            playTone(196.00, 'square', 0.1, 0.05); // G3
+        };
+
+        // --- GAME LOGIC ---
+        let scene, camera, renderer, clock, raycaster, mouse;
+        let playerObj, ground;
+        let blocks = [], cropList = [], particles = [], shopPos = new THREE.Vector3(15, 0, -15);
+        let joyPos = { x: 0, y: 0 }, moving = false;
+        let activeItem = 'seed_corn', velocityY = 0, jumping = false, deleteMode = false;
+        let harvestAnimTimer = 0;
+        let touchStartTime = 0, currentUserId = null, otherPlayers = {};
+
+        const dataInv = { 
+            dirt: 50, stone: 0, wood: 0, brick: 0, 
+            seed_corn: Infinity, seed_watermelon: Infinity, seed_orange: Infinity, seed_grape: Infinity,
+            apples: 0 
+        };
+        
+        const materials = {
+            dirt:  { c: 0x8d6e63, p: 2, n: "Tanah" },
+            stone: { c: 0x7f8c8d, p: 5, n: "Batu" },
+            wood:  { c: 0x5d4037, p: 8, n: "Kayu" },
+            brick: { c: 0xc0392b, p: 12, n: "Bata" },
+            seed_corn:       { c: 0xf1c40f, n: "Jagung", isSeed: true, fruitColor: 0xffeb3b, yield: 3 },
+            seed_watermelon: { c: 0x27ae60, n: "Semangka", isSeed: true, fruitColor: 0x1b5e20, yield: 5 },
+            seed_orange:     { c: 0xe67e22, n: "Jeruk", isSeed: true, fruitColor: 0xff9800, yield: 4 },
+            seed_grape:      { c: 0x8e44ad, n: "Anggur", isSeed: true, fruitColor: 0x673ab7, yield: 6 }
+        };
+
+        const palette = [0x1abc9c, 0x3498db, 0x9b59b6, 0xf1c40f, 0xe67e22, 0xe74c3c, 0x2ecc71, 0xecf0f1, 0x34495e, 0xf39c12];
+
+        async function init() {
+            refreshUI();
+            await signInAnonymously(auth);
+            onAuthStateChanged(auth, (user) => { if(user) { currentUserId = user.uid; syncPlayers(); } });
+
+            scene = new THREE.Scene(); scene.background = new THREE.Color(0x87ceeb);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
             document.body.appendChild(renderer.domElement);
-
-            clock = new THREE.Clock();
-
-            const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-            sun.position.set(50, 100, 50);
-            sun.castShadow = true;
-            scene.add(sun);
+            
+            clock = new THREE.Clock(); raycaster = new THREE.Raycaster(); mouse = new THREE.Vector2();
+            
             scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const sun = new THREE.DirectionalLight(0xffffff, 0.8); 
+            sun.position.set(30, 50, 30); sun.castShadow = true;
+            scene.add(sun);
 
-            const ground = new THREE.Mesh(
-                new THREE.PlaneGeometry(2000, 2000),
-                new THREE.MeshPhongMaterial({ color: 0x6ab04c })
-            );
-            ground.rotation.x = -Math.PI / 2;
-            ground.receiveShadow = true;
+            ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshPhongMaterial({color: 0x27ae60}));
+            ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
             scene.add(ground);
 
-            setupPlayer();
-            setupBuildPreview();
-            setupJoystick();
-            setupActions();
+            playerObj = buildHumanCharacter();
+            scene.add(playerObj.mesh);
+
+            const shopG = new THREE.Group(); shopG.position.copy(shopPos);
+            const shopMesh = new THREE.Mesh(new THREE.BoxGeometry(6, 4, 6), new THREE.MeshPhongMaterial({color: 0xf1f2f6}));
+            shopMesh.position.y = 2; shopG.add(shopMesh);
+            const roof = new THREE.Mesh(new THREE.BoxGeometry(7, 1, 7), new THREE.MeshPhongMaterial({color: 0x2f3542}));
+            roof.position.y = 4.5; shopG.add(roof);
+            scene.add(shopG);
+
+            setupControls();
             animate();
+            renderShop();
         }
 
-        function createPart(w, h, d, color, px, py, pz, isLimb = false) {
+        function buildHumanCharacter() {
             const group = new THREE.Group();
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshPhongMaterial({ color }));
-            if (isLimb) mesh.position.y = -h / 2;
-            mesh.castShadow = true;
-            group.add(mesh);
-            group.position.set(px, py, pz);
-            return group;
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.4), new THREE.MeshPhongMaterial({color: 0x3498db}));
+            torso.position.y = 1.1; group.add(torso);
+            const headG = new THREE.Group();
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshPhongMaterial({color: 0xffdbac}));
+            head.position.y = 1.75; headG.add(head);
+            const hair = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.2, 0.52), new THREE.MeshPhongMaterial({color: 0x2c3e50}));
+            hair.position.y = 2.0; headG.add(hair);
+            const eyeGeo = new THREE.BoxGeometry(0.08, 0.08, 0.02);
+            const eyeMat = new THREE.MeshBasicMaterial({color: 0x000000});
+            const eyeL = new THREE.Mesh(eyeGeo, eyeMat); eyeL.position.set(-0.12, 1.8, 0.26); headG.add(eyeL);
+            const eyeR = new THREE.Mesh(eyeGeo, eyeMat); eyeR.position.set(0.12, 1.8, 0.26); headG.add(eyeR);
+            group.add(headG);
+            const armG = new THREE.BoxGeometry(0.2, 0.7, 0.2);
+            const skinM = new THREE.MeshPhongMaterial({color: 0xffdbac});
+            const lArm = new THREE.Mesh(armG, skinM); lArm.position.set(-0.4, 1.1, 0); group.add(lArm);
+            const rArm = new THREE.Mesh(armG, skinM); rArm.position.set(0.4, 1.1, 0); group.add(rArm);
+            const legG = new THREE.BoxGeometry(0.25, 0.7, 0.25);
+            const pantsM = new THREE.MeshPhongMaterial({color: 0x2f3640});
+            const lLeg = new THREE.Mesh(legG, pantsM); lLeg.position.set(-0.15, 0.35, 0); group.add(lLeg);
+            const rLeg = new THREE.Mesh(legG, pantsM); rLeg.position.set(0.15, 0.35, 0); group.add(rLeg);
+            return { mesh: group, lArm, rArm, lLeg, rLeg };
         }
 
-        function setupPlayer() {
-            player = new THREE.Group();
-            bodyGroup = new THREE.Group();
-            torsoGroup = new THREE.Group();
-            player.add(bodyGroup);
-            bodyGroup.add(torsoGroup);
-
-            const skin = 0xffdbac, shirt = 0x2e86de, pants = 0x222f3e;
-
-            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.4), new THREE.MeshPhongMaterial({color: shirt}));
-            torso.position.y = 1.4;
-            torso.castShadow = true;
-            torsoGroup.add(torso);
-
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), new THREE.MeshPhongMaterial({color: skin}));
-            head.position.y = 0.65;
-            torso.add(head);
-
-            const eyeGeo = new THREE.BoxGeometry(0.08, 0.12, 0.05);
-            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-            const lEye = new THREE.Mesh(eyeGeo, eyeMat); lEye.position.set(-0.1, 0.05, 0.23); head.add(lEye);
-            const rEye = new THREE.Mesh(eyeGeo, eyeMat); rEye.position.set(0.1, 0.05, 0.23); head.add(rEye);
-
-            limbs.lArm = createPart(0.2, 0.7, 0.2, skin, -0.4, 1.75, 0, true);
-            limbs.rArm = createPart(0.2, 0.7, 0.2, skin, 0.4, 1.75, 0, true);
-            limbs.lLeg = createPart(0.25, 0.8, 0.25, pants, -0.18, 1.1, 0, true);
-            limbs.rLeg = createPart(0.25, 0.8, 0.25, pants, 0.18, 1.1, 0, true);
-
-            torsoGroup.add(limbs.lArm, limbs.rArm, limbs.lLeg, limbs.rLeg);
-            scene.add(player);
+        function syncPlayers() {
+            const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
+            onSnapshot(playersCol, (snap) => {
+                snap.docChanges().forEach(change => {
+                    const id = change.doc.id;
+                    if(id === currentUserId) return;
+                    const data = change.doc.data();
+                    if(change.type === 'added' || change.type === 'modified') {
+                        if(!otherPlayers[id]) {
+                            otherPlayers[id] = buildHumanCharacter();
+                            scene.add(otherPlayers[id].mesh);
+                        }
+                        otherPlayers[id].mesh.position.set(data.x, data.y, data.z);
+                        otherPlayers[id].mesh.rotation.y = data.ry;
+                    } else if(change.type === 'removed') {
+                        if(otherPlayers[id]) { scene.remove(otherPlayers[id].mesh); delete otherPlayers[id]; }
+                    }
+                });
+            });
+            setInterval(() => {
+                if(!currentUserId) return;
+                setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', currentUserId), {
+                    x: playerObj.mesh.position.x, y: playerObj.mesh.position.y, z: playerObj.mesh.position.z,
+                    ry: playerObj.mesh.rotation.y, isMoving: moving, lastSeen: Date.now()
+                });
+            }, 100);
         }
 
-        function setupBuildPreview() {
-            buildPreview = new THREE.Mesh(
-                new THREE.BoxGeometry(GRID, GRID, GRID),
-                new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, wireframe: true })
-            );
-            scene.add(buildPreview);
+        function createHarvestParticles(pos, color) {
+            for(let i=0; i<8; i++) {
+                const p = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), new THREE.MeshPhongMaterial({color: color}));
+                p.position.copy(pos);
+                p.userData = {
+                    vel: new THREE.Vector3((Math.random()-0.5)*0.2, Math.random()*0.2 + 0.1, (Math.random()-0.5)*0.2),
+                    life: 1.0
+                };
+                scene.add(p);
+                particles.push(p);
+            }
         }
 
-        function setupJoystick() {
-            const container = document.getElementById('joystick-container');
-            const knob = document.getElementById('joystick-knob');
-
-            const handleTouch = (e) => {
+        function setupControls() {
+            const base = document.getElementById('joy-base');
+            const stick = document.getElementById('joy-stick');
+            base.addEventListener('touchstart', (e) => { e.preventDefault(); moving = true; initAudio(); });
+            base.addEventListener('touchmove', (e) => {
                 e.preventDefault();
-                const touch = e.touches[0];
-                const rect = container.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                
-                let dx = touch.clientX - centerX;
-                let dy = touch.clientY - centerY;
-                const distance = Math.sqrt(dx*dx + dy*dy);
-
-                if (distance > joystickMaxDist) {
-                    dx *= joystickMaxDist / distance;
-                    dy *= joystickMaxDist / distance;
-                }
-
-                knob.style.transform = `translate(${dx}px, ${dy}px)`;
-                joystickInput.x = dx / joystickMaxDist;
-                joystickInput.y = dy / joystickMaxDist;
-                joystickActive = true;
-                startGame();
-            };
-
-            const resetJoystick = () => {
-                knob.style.transform = `translate(0px, 0px)`;
-                joystickInput = { x: 0, y: 0 };
-                joystickActive = false;
-            };
-
-            container.addEventListener('touchstart', handleTouch);
-            container.addEventListener('touchmove', handleTouch);
-            container.addEventListener('touchend', resetJoystick);
-        }
-
-        function setupActions() {
-            const jump = (e) => { 
-                e.preventDefault(); 
-                if (!isJumping) { 
-                    vVelocity = JUMP_FORCE; 
-                    isJumping = true; 
-                    playJumpSound();
-                } 
-                startGame(); 
-            };
-            document.getElementById('btn-jump').addEventListener('touchstart', jump);
-
-            const build = (e) => {
-                e.preventDefault();
-                const brick = new THREE.Mesh(new THREE.BoxGeometry(GRID, GRID, GRID), new THREE.MeshPhongMaterial({ color: 0x8d6e63 }));
-                brick.position.copy(buildPreview.position);
-                brick.castShadow = true; 
-                scene.add(brick); 
-                worldBlocks.push(brick);
-                playBuildSound();
-                startGame();
-            };
-            document.getElementById('btn-build').addEventListener('touchstart', build);
-
-            const startGame = () => { 
-                if (!gameStarted) { 
-                    gameStarted = true; 
-                    document.getElementById('overlay').style.display = 'none'; 
-                    initAudio(); // Aktifkan audio saat interaksi pertama
-                }
-            };
-            document.getElementById('overlay').addEventListener('click', startGame);
-
-            let lastX = 0;
-            document.addEventListener('touchstart', (e) => { if (e.touches[0].clientX > window.innerWidth * 0.5) lastX = e.touches[0].clientX; });
-            document.addEventListener('touchmove', (e) => {
-                if (e.touches[0].clientX > window.innerWidth * 0.5) {
-                    const dx = e.touches[0].clientX - lastX;
-                    cameraYaw -= dx * 0.007;
-                    lastX = e.touches[0].clientX;
-                }
+                const t = e.touches[0]; const r = base.getBoundingClientRect();
+                const dx = t.clientX - (r.left + 50), dy = t.clientY - (r.top + 50);
+                const d = Math.min(Math.sqrt(dx*dx+dy*dy), 40), a = Math.atan2(dy, dx);
+                stick.style.transform = `translate(${Math.cos(a)*d}px, ${Math.sin(a)*d}px)`;
+                joyPos = { x: Math.cos(a)*d/40, y: Math.sin(a)*d/40 };
+            });
+            base.addEventListener('touchend', () => { moving = false; stick.style.transform = ''; joyPos = {x:0,y:0}; });
+            document.getElementById('jump-trigger').addEventListener('touchstart', () => { if(!jumping){ velocityY = 0.28; jumping = true; initAudio(); } });
+            document.getElementById('delete-mode-trigger').addEventListener('touchstart', () => {
+                deleteMode = !deleteMode;
+                document.getElementById('mode-indicator').style.display = deleteMode ? 'block' : 'none';
+                document.getElementById('delete-mode-trigger').classList.toggle('btn-active');
+            });
+            window.addEventListener('touchstart', (e) => {
+                if(e.target !== renderer.domElement) return;
+                initAudio();
+                touchStartTime = Date.now();
+                const t = e.touches[0];
+                mouse.x = (t.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(t.clientY / window.innerHeight) * 2 + 1;
+            });
+            window.addEventListener('touchend', (e) => {
+                if(e.target !== renderer.domElement) return;
+                if(Date.now() - touchStartTime > 600) handleLongPress();
+                else handleTap();
             });
         }
 
-        function checkCollision(pos) {
-            let floor = 0;
-            for(let b of worldBlocks) {
-                const dx = Math.abs(pos.x - b.position.x);
-                const dz = Math.abs(pos.z - b.position.z);
-                if (dx < 0.8 && dz < 0.8) {
-                    const top = b.position.y + 0.5;
-                    if (pos.y >= top - 0.5) floor = Math.max(floor, top);
+        function handleTap() {
+            if(playerObj.mesh.position.distanceTo(shopPos) < 5) {
+                document.getElementById('shop-overlay').style.display = 'flex';
+                return;
+            }
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects([ground, ...blocks, ...cropList.map(c => c.mesh)]);
+            if(hits.length > 0) {
+                const h = hits[0];
+                const cropIdx = cropList.findIndex(c => c.mesh === h.object || c.mesh.children.includes(h.object));
+                
+                if(cropIdx !== -1) {
+                    const c = cropList[cropIdx];
+                    if(c.ready) doHarvest(cropIdx);
+                    return;
+                }
+
+                if(deleteMode) {
+                    if(h.object !== ground) { scene.remove(h.object); blocks = blocks.filter(b => b !== h.object); }
+                    return;
+                }
+
+                let pt = h.point.clone();
+                if(h.object !== ground) pt.add(h.face.normal.multiplyScalar(0.5));
+                const bx = Math.round(pt.x), by = Math.max(0.5, Math.round(pt.y)), bz = Math.round(pt.z);
+                const item = materials[activeItem];
+
+                if(item.isSeed) {
+                    playPlantSound();
+                    const plant = new THREE.Group(); plant.position.set(bx, 0, bz);
+                    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.5, 0.15), new THREE.MeshPhongMaterial({color: item.c}));
+                    plant.add(stem); scene.add(plant); 
+                    
+                    const btn = document.createElement('div');
+                    btn.className = 'harvest-btn';
+                    btn.innerText = '...';
+                    btn.style.display = 'none';
+                    document.getElementById('harvest-container').appendChild(btn);
+
+                    cropList.push({
+                        mesh: plant, age: 0, ready: false, yield: item.yield, name: item.n, fruitColor: item.fruitColor, btn: btn
+                    });
+                    refreshUI();
+                } else if(dataInv[activeItem] > 0) {
+                    const b = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshPhongMaterial({color: item.c}));
+                    b.position.set(bx, by, bz); b.castShadow = true; b.receiveShadow = true;
+                    scene.add(b); blocks.push(b);
+                    dataInv[activeItem]--; refreshUI();
                 }
             }
-            return floor;
+        }
+
+        function doHarvest(idx) {
+            const c = cropList[idx];
+            if (!c) return;
+            playHarvestSound();
+            let bonus = Math.random() > 0.8 ? 2 : 1;
+            let totalYield = c.yield * bonus;
+            dataInv.apples += totalYield;
+            
+            createHarvestParticles(c.mesh.position, c.fruitColor);
+            harvestAnimTimer = 0.5;
+            
+            scene.remove(c.mesh);
+            if(c.btn) c.btn.remove();
+            cropList.splice(idx, 1);
+            
+            let msg = bonus > 1 ? `CRITICAL! +${totalYield}` : `+${totalYield} Apel`;
+            notify(msg); refreshUI();
+        }
+
+        function handleLongPress() {
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(blocks);
+            if(hits.length > 0) {
+                hits[0].object.material.color.setHex(palette[Math.floor(Math.random()*palette.length)]);
+                notify("Warna Diganti!");
+            }
+        }
+
+        function refreshUI() {
+            document.getElementById('apple-val').innerText = dataInv.apples;
+            const bar = document.getElementById('inv-bar');
+            bar.innerHTML = '';
+            for(let k in materials) {
+                const isSel = activeItem === k ? 'selected' : '';
+                const displayVal = materials[k].isSeed ? '∞' : dataInv[k];
+                bar.innerHTML += `<div class="inv-slot ${isSel}" onclick="window.selectItem('${k}')">
+                    <div style="width:20px; height:20px; background:#${materials[k].c.toString(16).padStart(6,'0')}; border-radius:4px; margin-bottom:2px;"></div>
+                    <span>${displayVal}</span></div>`;
+            }
+        }
+
+        function renderShop() {
+            const container = document.getElementById('shop-items-container');
+            container.innerHTML = '';
+            for(let k in materials) {
+                if(materials[k].isSeed) continue;
+                container.innerHTML += `<div class="shop-item">
+                    <span><b>${materials[k].n}</b> (x10)</span>
+                    <button class="buy-button" onclick="window.buyItem('${k}')">${materials[k].p} 🍎</button>
+                </div>`;
+            }
+        }
+
+        window.selectItem = (k) => { activeItem = k; refreshUI(); };
+        window.closeShop = () => document.getElementById('shop-overlay').style.display = 'none';
+        window.buyItem = (k) => {
+            if(dataInv.apples >= materials[k].p) {
+                dataInv.apples -= materials[k].p; dataInv[k] += 10;
+                refreshUI(); notify("Beli Berhasil!");
+            } else notify("Apel Kurang!");
+        };
+
+        function notify(t) { 
+            const el = document.getElementById('toast'); 
+            el.innerText = t; el.style.display = 'block'; 
+            setTimeout(() => el.style.display = 'none', 2000); 
         }
 
         function animate() {
             requestAnimationFrame(animate);
-            const dt = clock.getDelta();
-
-            if (gameStarted) {
-                player.position.y += vVelocity;
-                const floorY = checkCollision(player.position);
-                if (player.position.y > floorY) vVelocity += GRAVITY;
-                else { player.position.y = floorY; vVelocity = 0; isJumping = false; }
-
-                if (joystickActive) {
-                    const moveX = joystickInput.x;
-                    const moveZ = joystickInput.y;
-                    const angle = Math.atan2(moveX, moveZ);
-                    
-                    let diff = angle - player.rotation.y;
-                    while (diff < -Math.PI) diff += Math.PI * 2;
-                    while (diff > Math.PI) diff -= Math.PI * 2;
-                    player.rotation.y += diff * 0.2;
-
-                    const intensity = Math.min(1, Math.sqrt(moveX*moveX + moveZ*moveZ));
-                    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(player.quaternion);
-                    player.position.addScaledVector(forward, MOVE_SPEED_BASE * intensity);
-
-                    walkCycle += dt * 14 * intensity;
-                    const swing = Math.sin(walkCycle);
-                    limbs.lLeg.rotation.x = swing * 0.8;
-                    limbs.rLeg.rotation.x = -swing * 0.8;
-                    limbs.lArm.rotation.x = -swing * 0.7;
-                    limbs.rArm.rotation.x = swing * 0.7;
-                    limbs.lLeg.position.y = 1.1 + (swing < 0 ? Math.abs(swing) * 0.2 : 0);
-                    limbs.rLeg.position.y = 1.1 + (swing > 0 ? Math.abs(swing) * 0.2 : 0);
-                    bodyGroup.position.y = Math.abs(swing) * 0.1;
-                } else {
-                    walkCycle = 0;
-                    const lerp = 0.15;
-                    limbs.lLeg.rotation.x = THREE.MathUtils.lerp(limbs.lLeg.rotation.x, 0, lerp);
-                    limbs.rLeg.rotation.x = THREE.MathUtils.lerp(limbs.rLeg.rotation.x, 0, lerp);
-                    limbs.lArm.rotation.x = THREE.MathUtils.lerp(limbs.lArm.rotation.x, 0, lerp);
-                    limbs.rArm.rotation.x = THREE.MathUtils.lerp(limbs.rArm.rotation.x, 0, lerp);
-                    limbs.lLeg.position.y = THREE.MathUtils.lerp(limbs.lLeg.position.y, 1.1, lerp);
-                    limbs.rLeg.position.y = THREE.MathUtils.lerp(limbs.rLeg.position.y, 1.1, lerp);
-                    bodyGroup.position.y = THREE.MathUtils.lerp(bodyGroup.position.y, 0, lerp);
+            const delta = clock.getDelta();
+            const time = Date.now() * 0.01;
+            
+            if(moving) {
+                const angle = Math.atan2(joyPos.x, joyPos.y);
+                playerObj.mesh.rotation.y = angle;
+                playerObj.mesh.position.x += Math.sin(angle) * 0.15;
+                playerObj.mesh.position.z += Math.cos(angle) * 0.15;
+                playerObj.lLeg.rotation.x = Math.sin(time)*0.5;
+                playerObj.rLeg.rotation.x = -Math.sin(time)*0.5;
+                if(harvestAnimTimer <= 0) {
+                    playerObj.lArm.rotation.x = -Math.sin(time)*0.4;
+                    playerObj.rArm.rotation.x = Math.sin(time)*0.4;
                 }
-
-                const buildPos = new THREE.Vector3(0, 0, 2.5).applyQuaternion(player.quaternion).add(player.position);
-                buildPreview.position.set(Math.round(buildPos.x), Math.max(0.5, Math.round(player.position.y + 0.5)), Math.round(buildPos.z));
-
-                const dist = 8;
-                camera.position.set(
-                    player.position.x + Math.sin(cameraYaw) * dist,
-                    player.position.y + 4,
-                    player.position.z + Math.cos(cameraYaw) * dist
-                );
-                camera.lookAt(player.position.x, player.position.y + 1.5, player.position.z);
+            } else {
+                playerObj.lLeg.rotation.x = 0; playerObj.rLeg.rotation.x = 0;
+                if(harvestAnimTimer <= 0) { playerObj.lArm.rotation.x = 0; playerObj.rArm.rotation.x = 0; }
             }
 
+            if(harvestAnimTimer > 0) {
+                harvestAnimTimer -= delta;
+                playerObj.rArm.rotation.x = -1.5;
+            }
+            
+            playerObj.mesh.position.y += velocityY;
+            let floor = 0;
+            blocks.forEach(b => {
+                if(Math.abs(playerObj.mesh.position.x - b.position.x) < 0.6 && 
+                   Math.abs(playerObj.mesh.position.z - b.position.z) < 0.6 && 
+                   playerObj.mesh.position.y >= b.position.y + 0.4) floor = Math.max(floor, b.position.y + 0.5);
+            });
+            if(playerObj.mesh.position.y > floor) velocityY -= 0.018;
+            else { playerObj.mesh.position.y = floor; velocityY = 0; jumping = false; }
+
+            cropList.forEach((c, idx) => {
+                if(!c.ready) {
+                    c.age += delta;
+                    if(c.age > 8) {
+                        c.ready = true;
+                        const fruit = new THREE.Mesh(new THREE.SphereGeometry(0.25), new THREE.MeshPhongMaterial({color: c.fruitColor}));
+                        fruit.position.y = 0.6;
+                        fruit.name = "fruit_part";
+                        c.mesh.add(fruit);
+                        if(c.btn) {
+                            c.btn.style.display = 'block';
+                            c.btn.innerText = 'PANEN 🍎';
+                            c.btn.onclick = () => doHarvest(idx);
+                        }
+                    }
+                } else {
+                    const fruitPart = c.mesh.getObjectByName("fruit_part");
+                    if(fruitPart) fruitPart.rotation.y += 0.05;
+                }
+
+                if(c.btn && c.btn.style.display !== 'none') {
+                    const vector = c.mesh.position.clone();
+                    vector.y += 1.5;
+                    vector.project(camera);
+                    const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (-(vector.y * 0.5) + 0.5) * window.innerHeight;
+                    c.btn.style.left = `${x}px`;
+                    c.btn.style.top = `${y}px`;
+                    c.btn.style.opacity = vector.z > 1 ? '0' : '1';
+                }
+            });
+
+            for(let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.position.add(p.userData.vel);
+                p.userData.vel.y -= 0.01;
+                p.userData.life -= delta * 1.5;
+                p.scale.setScalar(p.userData.life);
+                if(p.userData.life <= 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                }
+            }
+
+            camera.position.set(playerObj.mesh.position.x, playerObj.mesh.position.y + 10, playerObj.mesh.position.z + 12);
+            camera.lookAt(playerObj.mesh.position);
             renderer.render(scene, camera);
         }
-
         window.onload = init;
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     </script>
 </body>
 </html>

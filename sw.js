@@ -3,6 +3,7 @@ const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
+ '/GAMES/pixel.html',
   '/icon.png'
 ];
 

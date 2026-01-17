@@ -32,10 +32,10 @@
             backdrop-filter: blur(8px);
         }
         .dpad-btn:active { background: rgba(255,255,255,0.9); color: black; }
-        #up { grid-area: up; }
-        #down { grid-area: down; }
-        #left { grid-area: left; }
-        #right { grid-area: right; }
+        #up { grid-area: down; }
+        #down { grid-area: up; }
+        #left { grid-area: right; }
+        #right { grid-area: left; }
 
         /* Tombol Aksi - Dipindahkan lebih tinggi agar tidak tertekan bersamaan */
         .action-group {
@@ -67,14 +67,7 @@
     <div id="overlay">
         <h1>VOXEL WORLD</h1>
         <p style="color: #ffeb3b"><b>KONTROL DIPERBAIKI:</b></p>
-        <p>Atas ↑ = Maju (Menjauh)</p>
-        <p>Bawah ↓ = Mundur (Mendekat)</p>
-        <p>Tombol Aksi diletakkan lebih tinggi</p>
-        <br>
-        <p><i>Klik layar untuk memulai</i></p>
-    </div>
-
-    <div id="ui-layer">
+        <div id="ui-layer">
         <div class="dpad">
             <div id="down" class="dpad-btn">▲</div>
             <div id="right" class="dpad-btn">◀</div>
@@ -200,8 +193,8 @@
                 el.addEventListener('mousedown', start); el.addEventListener('mouseup', end);
             };
 
-            bindBtn('up', 'up'); bindBtn('down', 'down');
-            bindBtn('left', 'left'); bindBtn('right', 'right');
+            bindBtn('up', 'down'); bindBtn('down', 'up');
+            bindBtn('left', 'right'); bindBtn('right', 'left');
 
             const jump = (e) => { e.preventDefault(); if (!isJumping) { vVelocity = JUMP_FORCE; isJumping = true; } startGame(); };
             document.getElementById('btn-jump').addEventListener('touchstart', jump);
